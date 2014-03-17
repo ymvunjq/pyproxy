@@ -67,6 +67,7 @@ class Response(HTTPComm):
 class ThreadProxy(Thread):
     """ Handle HTTP Proxy communication between client and server """
     def __init__(self,conn,client_addr,from_client,from_server,fcom,timeout=60):
+        Thread.__init__(self)
         self.conn = conn
         self.client_addr = client_addr
         self.from_client = from_client
@@ -168,5 +169,5 @@ class Proxy(object):
     def run(self):
         while True:
             client_sock,client_addr = self.sock.accept()
-            handle = ThreadProxy(client_sock,client_addr,self.onReceiveClient,self.onReceiveServer,self.onCommunication).run()
-
+            th = ThreadProxy(client_sock,client_addr,self.onReceiveClient,self.onReceiveServer,self.onCommunication)
+            th.start()
