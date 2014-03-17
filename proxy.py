@@ -66,7 +66,7 @@ class Response(HTTPComm):
 
 class ThreadProxy(Thread):
     """ Handle HTTP Proxy communication between client and server """
-    def __init__(self,conn,client_addr,from_client,from_server,fcom,timeout=60):
+    def __init__(self,conn,client_addr,from_client,from_server,fcom,timeout=3):
         Thread.__init__(self)
         self.conn = conn
         self.client_addr = client_addr
@@ -76,6 +76,7 @@ class ThreadProxy(Thread):
         self.timeout = timeout
         self.request = None
         self.response = None
+        self.stop = False
 
     @staticmethod
     def urlparse(url):
@@ -90,7 +91,7 @@ class ThreadProxy(Thread):
 
     def forward(self,client):
         socks = [self.conn,client]
-        while True:
+        while not self.stop:
             (read,write,error) = select.select(socks,[],socks,self.timeout)
             if error:
                 return
@@ -167,7 +168,17 @@ class Proxy(object):
             m.onCommunication(request,response)
 
     def run(self):
-        while True:
-            client_sock,client_addr = self.sock.accept()
-            th = ThreadProxy(client_sock,client_addr,self.onReceiveClient,self.onReceiveServer,self.onCommunication)
-            th.start()
+        threads = []
+        try:
+            while True:
+                client_sock,client_addr = self.sock.accept()
+                th = ThreadProxy(client_sock,client_addr,self.onReceiveClient,self.onReceiveServer,self.onCommunication)
+                th.start()
+                threads.append(th)
+        except KeyboardInterrupt:
+            pass
+
+        self.sock.close()
+
+        for t in threads:
+            t.stop = True
