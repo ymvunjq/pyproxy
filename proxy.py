@@ -90,6 +90,7 @@ class ThreadProxy(Thread):
             return (netloc,443 if req.scheme == "https" else 80)
 
     def forward(self,client):
+        """ Proxyfy between client and server """
         socks = [self.conn,client]
         while not self.stop:
             (read,write,error) = select.select(socks,[],socks,self.timeout)
@@ -97,9 +98,14 @@ class ThreadProxy(Thread):
                 return
             if read:
                 for s in read:
-                    data = s.recv(MAX_DATA_RECV)
+                    try:
+                        data = s.recv(MAX_DATA_RECV)
+                    except socket.error as e:
+                        logger.warning("%s" % e)
+                        return
+
                     if len(data) > 0:
-                        if s == self.conn:
+                        if s == self.conn:  # From web client
                             out = client
                             if not self.request:
                                 self.request = Request(data)
@@ -107,7 +113,7 @@ class ThreadProxy(Thread):
                                     self.from_client(self.request)
                             else:
                                 self.request.append(data)
-                        else:
+                        else: # From web server
                             out = self.conn
                             if not self.response:
                                 self.response = Response(data)
@@ -123,7 +129,12 @@ class ThreadProxy(Thread):
                         return
 
     def run(self):
-        data = self.conn.recv(MAX_DATA_RECV)
+        try:
+            data = self.conn.recv(MAX_DATA_RECV)
+        except socket.error as e:
+            logger.warning("%s" % e)
+            self.conn.close()
+            return
 
         if len(data) != 0:
             request = Request(data)
