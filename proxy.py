@@ -166,6 +166,8 @@ class ThreadProxy(Thread):
                         else: # From web server
                             out = self.conn
                         out.send(data)
+                    else:
+                        return
 
     def run(self):
         try:
