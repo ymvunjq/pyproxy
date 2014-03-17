@@ -43,9 +43,9 @@ class Logger(Module):
         if self.log_response:
             print "< %r %s" % (response.code,response.code_response)
             if self.headers:
-                self._print_headers(request,"<")
+                self._print_headers(response,"<")
             if self.data:
-                self._print_data(request,"<")
+                self._print_data(response,"<")
             print ""
 
     def onCommunication(self,request,response):
