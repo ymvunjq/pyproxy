@@ -128,22 +128,26 @@ class ThreadProxy(Thread):
         self.conn.close()
 
 class Proxy(object):
-    def __init__(self,port=8080,host="127.0.0.1"):
+    def __init__(self,port=8080,host="127.0.0.1",modules=[]):
         self.port = port
         self.host = host
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((self.host,self.port))
         self.sock.listen(200)
+        self.modules = modules
 
     def onReceiveClient(self,request):
-        pass
+        for m in self.modules:
+            m.onReceiveClient(request)
 
     def onReceiveServer(self,response):
-        pass
+        for m in self.modules:
+            m.onReceiveServer(response)
 
     def onCommunication(self,request,response):
-        pass
+        for m in self.modules:
+            m.onCommunication(request,response)
 
     def run(self):
         while True:
