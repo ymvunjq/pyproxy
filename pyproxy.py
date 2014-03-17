@@ -12,6 +12,7 @@ except:
     print "python-argparse is needed"
     sys.exit(1)
 
+from proxy import Proxy
 import module
 from modules import *
 
@@ -19,12 +20,21 @@ def get_parser():
     parser = argparse.ArgumentParser(description="HTTP logging python proxy")
     parser.add_argument("-b","--bind",metavar="IP",default="127.0.0.1",help="Address to bind to")
     parser.add_argument("-p","--port",metavar="PORT",default="8080",type=int,help="Port to bind to")
+    parser.add_argument("--debug",metavar="DEBUG_LEVEL",default="info",help="Set debug level for proxy core")
     return parser
 
 def main():
     """ Entry Point Program """
     parser = get_parser()
-    module.Module.main(parser)
+    parser = module.Module.create_arg_parser(parser)
+    args = parser.parse_args()
+
+    mod = module.ModuleRegister.get(args.module_name)
+    m = mod(args)
+
+    proxy = Proxy(args.port,args.bind,[m])
+    proxy.run()
+
     return 0
 
 if __name__ == "__main__":

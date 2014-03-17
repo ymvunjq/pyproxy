@@ -4,6 +4,8 @@
 import sys
 from collections import defaultdict
 
+from proxy import Proxy
+
 class ModuleRegister(object):
     registry = defaultdict(dict)
 
@@ -39,16 +41,6 @@ class Module(object):
     @classmethod
     def create_arg_subparser(cls,parser):
         pass
-
-    @classmethod
-    def main(cls,parser):
-        parser = cls.create_arg_parser(parser)
-        args = parser.parse_args()
-
-        module = ModuleRegister.get(args.module_name)
-        m = module(args)
-
-        m.run()
 
     def __init__(self,args):
         pass
