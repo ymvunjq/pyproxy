@@ -5,8 +5,9 @@ from proxy import Proxy
 from module import Module
 
 @Module.register
-class Logger(Module,Proxy):
+class Logger(Module):
     _desc_ = "Logging Proxy"
+
     @classmethod
     def create_arg_subparser(cls,parser):
         parser.add_argument("--log-request",action="store_true",help="Print requests done by client")
@@ -16,7 +17,6 @@ class Logger(Module,Proxy):
         parser.add_argument("--data",action="store_true",help="Print data")
 
     def __init__(self,args):
-        Proxy.__init__(self,args.port,args.bind)
         Module.__init__(self,args)
         self.log_request = args.log_request
         self.log_response = args.log_response
