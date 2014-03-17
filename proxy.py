@@ -106,7 +106,7 @@ class ThreadProxy(Thread):
         else:
             return (netloc,443 if req.scheme == "https" else 80)
 
-    def forward(self,client):
+    def forward_http(self,client):
         """ Proxyfy between client and server """
         socks = [self.conn,client]
         while not self.stop:
@@ -145,6 +145,28 @@ class ThreadProxy(Thread):
                     else:
                         return
 
+    def forward_https(self,client):
+        """ Proxyfy between client and server """
+        socks = [self.conn,client]
+        while not self.stop:
+            (read,write,error) = select.select(socks,[],socks,self.timeout)
+            if error:
+                return
+            if read:
+                for s in read:
+                    try:
+                        data = s.recv(MAX_DATA_RECV)
+                    except socket.error as e:
+                        logger.warning("%s" % e)
+                        return
+
+                    if len(data) > 0:
+                        if s == self.conn:  # From web client
+                            out = client
+                        else: # From web server
+                            out = self.conn
+                        out.send(data)
+
     def run(self):
         try:
             data = self.conn.recv(MAX_DATA_RECV)
@@ -163,12 +185,17 @@ class ThreadProxy(Thread):
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
+                logger.debug("Connect to (%s,%u)" % (ip,port))
                 s.connect((ip,port))
             except socket.error as e:
                 logger.warning("Connect to (%s,%u) : %s" % (ip,port,e))
             else:
-                s.send(data)
-                self.forward(s)
+                if request.method == "CONNECT":
+                    self.conn.send("%s 200 Connection established\n\n" % request.version)
+                    self.forward_https(s)
+                else:
+                    s.send(data)
+                    self.forward_http(s)
             s.close()
 
         self.conn.close()
