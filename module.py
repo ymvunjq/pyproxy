@@ -4,12 +4,6 @@
 import sys
 from collections import defaultdict
 
-try:
-    import argparse
-except:
-    print "python-argparse is needed"
-    sys.exit(1)
-
 class ModuleRegister(object):
     registry = defaultdict(dict)
 
@@ -34,11 +28,7 @@ class Module(object):
         return ModuleRegister.register(f,key="__name__")
 
     @classmethod
-    def create_arg_parser(cls):
-        parser = argparse.ArgumentParser(description="HTTP logging python proxy")
-        parser.add_argument("-b","--bind",metavar="IP",default="127.0.0.1",help="Address to bind to")
-        parser.add_argument("-p","--port",metavar="PORT",default="8080",type=int,help="Port to bind to")
-
+    def create_arg_parser(cls,parser):
         subparsers = parser.add_subparsers(dest="module_name",help="Modules")
         for module in ModuleRegister.itervalues():
             p = subparsers.add_parser(module.__name__,help=module._desc_)
@@ -51,8 +41,8 @@ class Module(object):
         pass
 
     @classmethod
-    def main(cls):
-        parser = cls.create_arg_parser()
+    def main(cls,parser):
+        parser = cls.create_arg_parser(parser)
         args = parser.parse_args()
 
         module = ModuleRegister.get(args.module_name)
