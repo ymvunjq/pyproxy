@@ -6,13 +6,14 @@
 """
 
 import sys
+import logging
 try:
     import argparse
 except:
     print "python-argparse is needed"
     sys.exit(1)
 
-from proxy import Proxy
+import proxy
 import module
 from modules import *
 
@@ -29,11 +30,13 @@ def main():
     parser = module.Module.create_arg_parser(parser)
     args = parser.parse_args()
 
+    proxy.logger.setLevel(getattr(logging,args.debug.upper(),None))
+
     mod = module.ModuleRegister.get(args.module_name)
     m = mod(args)
 
-    proxy = Proxy(args.port,args.bind,[m])
-    proxy.run()
+    pxy = proxy.Proxy(args.port,args.bind,[m])
+    pxy.run()
 
     return 0
 

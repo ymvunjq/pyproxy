@@ -5,8 +5,16 @@ import sys
 import socket,select
 import urlparse
 from threading import Thread
+import logging
 
 MAX_DATA_RECV=4096
+
+logger = logging.getLogger("PYPROXY")
+logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+store = logging.FileHandler("pyproxy.log")
+store.setFormatter(formatter)
+logger.addHandler(store)
 
 class HTTPComm(object):
     """ Request/Response HTTP """
