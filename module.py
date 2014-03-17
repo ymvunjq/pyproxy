@@ -52,3 +52,12 @@ class Module(object):
 
     def __init__(self,args):
         pass
+
+    def onReceiveClient(self,request):
+        pass
+
+    def onReceiveServer(self,response):
+        pass
+
+    def onCommunication(self,request,response):
+        pass
