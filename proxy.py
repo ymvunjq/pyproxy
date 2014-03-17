@@ -45,6 +45,23 @@ class HTTPComm(object):
         if "Content-Length" in self.headers:
             length = int(self.headers["Content-Length"])
             return len(self.data) == length
+        elif "Transfer-Encoding" in self.headers:
+            i = 0
+            l = len(self.data)
+            stop = False
+            while not stop:
+                j = self.data.find("\r\n",i)
+                if j == -1:
+                    return False
+                length = int(self.data[i:j],16)
+                # Shall stop with chunk of size 0
+                if length == 0:
+                    stop = True
+                i = j+2
+                if i+length+2 > l:
+                    return False
+                i += length+2
+            return True
         return True
 
     def append(self,data):
