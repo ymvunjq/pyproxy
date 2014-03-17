@@ -76,6 +76,17 @@ class ThreadProxy(Thread):
         self.request = None
         self.response = None
 
+    @staticmethod
+    def urlparse(url):
+        """ Return tuple (ip,port) """
+        req = urlparse.urlparse(url)
+        netloc = req.netloc if len(req.netloc) > 0 else req.path
+        if ":" in netloc:
+            x = netloc.split(":")
+            return (x[0],int(x[1]))
+        else:
+            return (netloc,443 if req.scheme == "https" else 80)
+
     def forward(self,client):
         socks = [self.conn,client]
         while True:
@@ -118,19 +129,16 @@ class ThreadProxy(Thread):
             self.from_client(request)
 
             # URL Parsing
-            req = urlparse.urlparse(request.url)
-            if ":" in req.netloc:
-                x = req.netloc.split(":")
-                ip = x[0]
-                port = int(x[1])
-            else:
-                ip = req.netloc
-                port = 80
+            ip,port = ThreadProxy.urlparse(request.url)
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((ip,port))
-            s.send(data)
-            self.forward(s)
+            try:
+                s.connect((ip,port))
+            except socket.error as e:
+                logger.warning("Connect to (%s,%u) : %s" % (ip,port,e))
+            else:
+                s.send(data)
+                self.forward(s)
             s.close()
 
         self.conn.close()
