@@ -36,7 +36,8 @@ class HTTPComm(object):
 
         headers = self.raw[end_first_line+l:end_headers].split(sep)
         for line in headers:
-            key,value = line.split(": ")
+            indice = line.find(": ")
+            key,value = line[:indice],line[indice+2:]
             self.headers[key] = value
 
         self.data = self.raw[end_headers+2*l:]
