@@ -6,6 +6,7 @@ import socket,select
 import urlparse
 from threading import Thread
 import logging
+import re
 
 MAX_DATA_RECV=4096
 
@@ -75,9 +76,9 @@ class Request(HTTPComm):
 
     def proxyfy(self):
         """ Change URL received (http://..) with only path and add host header """
-        url = urlparse.urlparse(self.url)
-        host_field = "Host: %s\r\n" % url.hostname if "Host" not in self.headers else ""
-        s = "%s %s %s\r\n%s%s\r\n\r\n%s" % (self.method,url.path,self.version,host_field,"\r\n".join(["%s: %s" % (k,v) for k,v in self.headers.iteritems()]),self.data)
+        url = re.search("(?P<method>http?)://(?P<hostname>[^/]+)(?P<uri>.*)", self.url)
+        host_field = "Host: %s\r\n" % url.group("hostname") if "Host" not in self.headers else ""
+        s = "%s %s %s\r\n%s%s\r\n\r\n%s" % (self.method,url.group("uri"),self.version,host_field,"\r\n".join(["%s: %s" % (k,v) for k,v in self.headers.iteritems()]),self.data)
         return s
 
 class Response(HTTPComm):
