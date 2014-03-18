@@ -84,11 +84,18 @@ class Request(HTTPComm):
 class Response(HTTPComm):
     """ Response sent by HTTP server """
     def parse_first_line(self,line):
-        end_version = line.find(" ")
-        self.version = line[:end_version]
-        end_code = line.find(" ",end_version+1)
-        self.code = int(line[end_version+1:end_code])
-        self.code_response = line[end_code+1:]
+        try:
+            end_version = line.find(" ")
+            self.version = line[:end_version]
+            end_code = line.find(" ",end_version+1)
+            self.code = int(line[end_version+1:end_code])
+            self.code_response = line[end_code+1:]
+        except:
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            logger.critical("Unable to parse %r as first response line" % line)
+            logger.critical("TRACEBACK: %s" % ("\n".join(traceback.format_exception(exc_type,exc_value,exc_traceback)),))
+            raise RuntimeError, "Critical Error Parsing"
+
 
 class ThreadProxy(Thread):
     """ Handle HTTP Proxy communication between client and server """
