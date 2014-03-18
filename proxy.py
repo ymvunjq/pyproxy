@@ -44,10 +44,10 @@ class HTTPComm(object):
         self.data = self.raw[end_headers+2*l:]
 
     def isComplete(self):
-        if "Content-Length" in self.headers:
+        if "content-length" in map(lambda x:x.lower(),self.headers.keys()):
             length = int(self.headers["Content-Length"])
             return len(self.data) == length
-        elif "Transfer-Encoding" in self.headers:
+        elif "transfer-encoding" in map(lambda x:x.lower(),self.headers.keys()):
             i = 0
             l = len(self.data)
             stop = False
@@ -141,21 +141,24 @@ class ThreadProxy(Thread):
                         if s == self.conn:  # From web client
                             out = client
 
-                            req = Request(data)
-                            if req.isComplete():
+                            if len(self.requests) == 0 or self.requests[-1].isComplete():
+                                req = Request(data)
                                 self.from_client(req)
                                 data = req.proxyfy()
                                 self.requests.append(req)
                             else:
-                                logger.error("Incomplete Request: %r" % data)
-                                raise NotImplementedError, "Request not complete"
+                                #print "> DATA: %r" % data
+                                self.requests[-1].append(data)
                         else: # From web server
                             out = self.conn
                             if not response:
                                 response = Response(data)
                                 if response.isComplete():
+                                    #print "< DATA: %r" % data
                                     self.from_server(response)
+                                    assert len(self.requests) > 0
                                     request = self.requests.pop(0)
+                                    assert request.isComplete()
                                     self.fcom(request,response)
                                     response = None
                             else:
@@ -215,9 +218,6 @@ class ThreadProxy(Thread):
                     self.conn.send("%s 200 Connection established\n\n" % request.version)
                     self.forward_https(s)
                 else:
-                    if not request.isComplete():
-                        logger.error("Incomplete Request: %r" % data)
-                        raise NotImplementedError, "Request not complete"
                     data = request.proxyfy()
                     s.send(data)
                     self.forward_http(s)
