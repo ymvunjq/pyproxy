@@ -73,6 +73,13 @@ class Request(HTTPComm):
     def parse_first_line(self,line):
         self.method,self.url,self.version = line.split(" ")
 
+    def proxyfy(self):
+        """ Change URL received (http://..) with only path and add host header """
+        url = urlparse.urlparse(self.url)
+        host_field = "Host: %s\r\n" % url.hostname if "Host" not in self.headers else ""
+        s = "%s %s %s\r\n%s%s\r\n\r\n%s" % (self.method,url.path,self.version,host_field,"\r\n".join(["%s: %s" % (k,v) for k,v in self.headers.iteritems()]),self.data)
+        return s
+
 class Response(HTTPComm):
     """ Response sent by HTTP server """
     def parse_first_line(self,line):
@@ -129,6 +136,9 @@ class ThreadProxy(Thread):
                                 self.request = Request(data)
                                 if self.request.isComplete():
                                     self.from_client(self.request)
+                                    data = self.request.proxyfy()
+                                else:
+                                    raise NotImplemented("Request not complete")
                             else:
                                 self.request.append(data)
                         else: # From web server
@@ -197,6 +207,9 @@ class ThreadProxy(Thread):
                     self.conn.send("%s 200 Connection established\n\n" % request.version)
                     self.forward_https(s)
                 else:
+                    if not request.isComplete():
+                        raise NotImplemented("Request not complete")
+                    data = request.proxyfy()
                     s.send(data)
                     self.forward_http(s)
             s.close()
