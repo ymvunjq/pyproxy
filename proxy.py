@@ -99,9 +99,8 @@ class ThreadProxy(Thread):
         self.from_server = from_server
         self.fcom = fcom
         self.timeout = timeout
-        self.request = None
-        self.response = None
         self.stop = False
+        self.requests = [] # list of requests waiting for responses
 
     @staticmethod
     def urlparse(url):
@@ -116,6 +115,7 @@ class ThreadProxy(Thread):
 
     def forward_http(self,client):
         """ Proxyfy between client and server """
+        response = None
         socks = [self.conn,client]
         while not self.stop:
             (read,write,error) = select.select(socks,[],socks,self.timeout)
@@ -132,26 +132,25 @@ class ThreadProxy(Thread):
                     if len(data) > 0:
                         if s == self.conn:  # From web client
                             out = client
-                            if not self.request:
-                                self.request = Request(data)
-                                if self.request.isComplete():
-                                    self.from_client(self.request)
-                                    data = self.request.proxyfy()
-                                else:
-                                    raise NotImplemented("Request not complete")
+
+                            req = Request(data)
+                            if req.isComplete():
+                                self.from_client(req)
+                                data = req.proxyfy()
+                                self.requests.append(req)
                             else:
-                                self.request.append(data)
+                                raise NotImplemented("Request not complete")
                         else: # From web server
                             out = self.conn
-                            if not self.response:
-                                self.response = Response(data)
-                                if self.response.isComplete():
-                                    self.from_server(self.response)
-                                    self.fcom(self.request,self.response)
-                                    self.request = None
-                                    self.response = None
+                            if not response:
+                                response = Response(data)
+                                if response.isComplete():
+                                    self.from_server(response)
+                                    request = self.requests.pop(0)
+                                    self.fcom(request,response)
+                                    response = None
                             else:
-                                self.response.append(data)
+                                response.append(data)
                         out.send(data)
                     else:
                         return
@@ -190,7 +189,7 @@ class ThreadProxy(Thread):
 
         if len(data) != 0:
             request = Request(data)
-            self.request = request
+            self.requests.append(request)
             self.from_client(request)
 
             # URL Parsing
