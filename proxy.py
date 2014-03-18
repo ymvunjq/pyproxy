@@ -140,7 +140,7 @@ class ThreadProxy(Thread):
                                 data = req.proxyfy()
                                 self.requests.append(req)
                             else:
-                                raise NotImplemented("Request not complete")
+                                raise NotImplementedError, "Request not complete"
                         else: # From web server
                             out = self.conn
                             if not response:
@@ -208,7 +208,7 @@ class ThreadProxy(Thread):
                     self.forward_https(s)
                 else:
                     if not request.isComplete():
-                        raise NotImplemented("Request not complete")
+                        raise NotImplementedError, "Request not complete"
                     data = request.proxyfy()
                     s.send(data)
                     self.forward_http(s)
