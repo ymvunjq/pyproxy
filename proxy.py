@@ -9,6 +9,8 @@ from threading import Thread
 import logging
 import re
 
+from utils import InsensitiveDict
+
 MAX_DATA_RECV=4096
 
 logger = logging.getLogger("PYPROXY")
@@ -25,7 +27,6 @@ class HTTPComm(object):
     def __init__(self,data):
         self.raw = data
         self.data = []
-        self.headers = {}
         if self.isCompleteHeaders():
             self.parse()
 
@@ -34,7 +35,7 @@ class HTTPComm(object):
 
     def parse_headers(self,data):
         l = len(HTTPComm.separator)
-        r = {}
+        r = InsensitiveDict()
         headers = data.split(HTTPComm.separator)
         for line in headers:
             indice = line.find(": ")
@@ -61,10 +62,10 @@ class HTTPComm(object):
         return not self.raw.find(HTTPComm.separator*2) == -1
 
     def isCompleteData(self):
-        if "content-length" in map(lambda x:x.lower(),self.headers.keys()):
+        if "COntent-length" in self.headers:
             length = int(self.headers["Content-Length"])
             return len(self.data) == length
-        elif "transfer-encoding" in map(lambda x:x.lower(),self.headers.keys()):
+        elif "Transfer-Encoding" in self.headers:
             i = 0
             l = len(self.data)
             stop = False
