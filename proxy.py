@@ -20,31 +20,47 @@ logger.addHandler(store)
 
 class HTTPComm(object):
     """ Request/Response HTTP """
+    separator = "\r\n"
+
     def __init__(self,data):
         self.raw = data
         self.data = []
         self.headers = {}
-        self.parse()
+        if self.isCompleteHeaders():
+            self.parse()
 
     def __str__(self):
         return self.raw
 
-    def parse(self):
-        sep = "\r\n"
-        l = len(sep)
-        end_first_line = self.raw.find(sep)
-        self.parse_first_line(self.raw[:end_first_line])
-        end_headers = self.raw.find(sep+sep,end_first_line+l)
-
-        headers = self.raw[end_first_line+l:end_headers].split(sep)
+    def parse_headers(self,data):
+        l = len(HTTPComm.separator)
+        r = {}
+        headers = data.split(HTTPComm.separator)
         for line in headers:
             indice = line.find(": ")
             key,value = line[:indice],line[indice+2:]
-            self.headers[key] = value
+            r[key] = value
+        return r
 
+    def parse(self):
+        """ Parse HTTP Communication """
+        l = len(HTTPComm.separator)
+
+        # First line
+        end_line = self.raw.find(HTTPComm.separator)
+        self.parse_first_line(self.raw[:end_line])
+
+        # Headers
+        end_headers = self.raw.find(HTTPComm.separator+HTTPComm.separator,end_line+l)
+        self.headers = self.parse_headers(self.raw[end_line+l:end_headers])
+
+        # Data
         self.data = self.raw[end_headers+2*l:]
 
-    def isComplete(self):
+    def isCompleteHeaders(self):
+        return not self.raw.find(HTTPComm.separator*2) == -1
+
+    def isCompleteData(self):
         if "content-length" in map(lambda x:x.lower(),self.headers.keys()):
             length = int(self.headers["Content-Length"])
             return len(self.data) == length
@@ -53,7 +69,7 @@ class HTTPComm(object):
             l = len(self.data)
             stop = False
             while not stop:
-                j = self.data.find("\r\n",i)
+                j = self.data.find(HTTPComm.separator,i)
                 if j == -1:
                     return False
                 length = int(self.data[i:j],16)
@@ -64,22 +80,50 @@ class HTTPComm(object):
                 if i+length+2 > l:
                     return False
                 i += length+2
-            return True
         return True
 
+    def isComplete(self):
+        if not self.isCompleteHeaders():
+            return False
+        return self.isCompleteData()
+
+
     def append(self,data):
-        self.data = self.data + data
+        if self.isCompleteHeaders():
+            self.data = self.data + data
+            self.raw = self.raw + data
+        else:
+            self.raw = self.raw + data
+            if self.isCompleteHeaders():
+                self.parse()
 
 class Request(HTTPComm):
     """ Request sent by HTTP Client """
+    @classmethod
+    def split_first_line(cls,line):
+        return line.split(" ")
+
     def parse_first_line(self,line):
-        self.method,self.url,self.version = line.split(" ")
+        self.method,self.url,self.version = Request.split_first_line(line)
 
     def proxyfy(self):
         """ Change URL received (http://..) with only path and add host header """
-        url = re.search("(?P<method>http?)://(?P<hostname>[^/]+)(?P<uri>.*)", self.url)
-        host_field = "Host: %s\r\n" % url.group("hostname") if "Host" not in self.headers else ""
-        s = "%s %s %s\r\n%s%s\r\n\r\n%s" % (self.method,url.group("uri"),self.version,host_field,"\r\n".join(["%s: %s" % (k,v) for k,v in self.headers.iteritems()]),self.data)
+        l = len(HTTPComm.separator)
+
+        end_line = self.raw.find(HTTPComm.separator)
+        method,url,version = Request.split_first_line(self.raw[:end_line])
+        url = re.search("(?P<method>http?)://(?P<hostname>[^/]+)(?P<uri>.*)", url)
+
+        if self.isCompleteHeaders():
+            headers = self.headers
+        else:
+            end_headers = self.raw.find(HTTPComm.Separator*2)
+            end_headers = end_headers if end_headers != -1 else len(self.raw)
+            headers = self.parse_headers(self.raw[end_line+l:end_headers])
+
+        host_field = "Host: %s%s" % (url.group("hostname"),HTTPComm.separator) if "Host" not in headers else ""
+
+        s = "{method} {url} {version}{separator}{host_header}{remaining_data}".format(method=method,url=url.group("uri"),version=version,separator=HTTPComm.separator,host_header=host_field,remaining_data=self.raw[end_line+l:])
         return s
 
 class Response(HTTPComm):
