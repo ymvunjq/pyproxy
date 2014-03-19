@@ -4,6 +4,7 @@
 import sys
 import socket,select
 import urlparse
+import traceback
 from threading import Thread
 import logging
 import re
