@@ -18,7 +18,7 @@ import module
 from modules import *
 
 def get_parser():
-    parser = argparse.ArgumentParser(description="HTTP logging python proxy")
+    parser = argparse.ArgumentParser(description="Python Proxy")
     parser.add_argument("-b","--bind",metavar="IP",default="127.0.0.1",help="Address to bind to")
     parser.add_argument("-p","--port",metavar="PORT",default="8080",type=int,help="Port to bind to")
     parser.add_argument("--debug",metavar="DEBUG_LEVEL",default="info",help="Set debug level for proxy core")
