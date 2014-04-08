@@ -8,29 +8,35 @@ class ModuleRegister(object):
     registry = defaultdict(dict)
 
     @classmethod
-    def register(cls,obj,key="__name__"):
-        cls.registry[cls.__name__][getattr(obj,key)] = obj
+    def register(cls,obj,proxys,key="__name__"):
+        for proxy in proxys:
+            cls.registry[proxy][getattr(obj,key)] = obj
         return obj
 
     @classmethod
-    def get(cls, name, default=None):
-        return cls.registry[cls.__name__].get(name, default)
+    def get(cls,name,default=None):
+        for k,v in cls.registry.iteritems():
+            if name in v:
+                return cls.registry[k][name]
+        return default
 
     @classmethod
-    def itervalues(cls):
-        return cls.registry[cls.__name__].itervalues()
+    def itervalues(cls,proxy):
+        return cls.registry[proxy].itervalues()
 
 class Module(object):
     _desc_ = "N/A"
 
     @staticmethod
-    def register(f):
-        return ModuleRegister.register(f,key="__name__")
+    def register(*args):
+        def wrapper(f):
+            return ModuleRegister.register(f,args,key="__name__")
+        return wrapper
 
     @classmethod
-    def create_arg_parser(cls,parser):
+    def create_arg_parser(cls,parser,proxy):
         subparsers = parser.add_subparsers(dest="module_name",help="Modules")
-        for module in ModuleRegister.itervalues():
+        for module in ModuleRegister.itervalues(proxy):
             p = subparsers.add_parser(module.__name__,help=module._desc_)
             module.create_arg_subparser(p)
 
