@@ -11,6 +11,14 @@ class Layer4Proxy(Proxy):
         parser.add_argument("--server-ip",default="127.0.0.1",metavar="IP",help="IP Server to connect to")
         parser.add_argument("--server-port",default=80,metavar="PORT",type=int,help="Port Server to connect to")
 
+    def __init__(self,args):
+        Proxy.__init__(self,args)
+        self.server_ip = args.server_ip
+        self.server_port = args.server_port
+
+    def getServerAddr(self,data):
+        return (self.server_ip,self.server_port)
+
     def bind(self):
         s = socket.socket(socket.AF_INET, self.socket_protocol)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
