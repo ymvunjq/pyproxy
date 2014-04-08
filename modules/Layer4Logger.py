@@ -3,7 +3,7 @@
 
 from module import Module
 
-@Module.register
+@Module.register("TCPProxy","UDPProxy")
 class Layer4Logger(Module):
     _desc_ = "Layer 4 Logging Proxy"
 
