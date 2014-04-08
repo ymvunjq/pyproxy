@@ -3,13 +3,13 @@
 
 import sys
 import socket,select
-import urlparse
 import traceback
 from threading import Thread
 import logging
 import re
 
-from utils import InsensitiveDict
+import module
+from modules import *
 
 MAX_DATA_RECV=4096
 
@@ -75,17 +75,53 @@ class ThreadProxy(Thread):
 
         self.conn.close()
 
-class Proxy(object):
-    def __init__(self,server_ip,server_port,port=8080,host="127.0.0.1",modules=[]):
-        self.server_ip = server_ip
-        self.server_port = server_port
-        self.port = port
-        self.host = host
-        self.modules = modules
-        self.sock = self.bind()
+class ProxyRegister(object):
+    registry = {}
 
-    def getServerAddr(self,data):
-        return (self.server_ip,self.server_port)
+    @classmethod
+    def register(cls,obj,key="__name__"):
+        cls.registry[getattr(obj,key)] = obj
+        return obj
+
+    @classmethod
+    def get(cls, name, default=None):
+        return cls.registry.get(name, default)
+
+    @classmethod
+    def itervalues(cls):
+        return cls.registry.itervalues()
+
+
+class Proxy(object):
+    _desc_ = "N/A"
+
+    @staticmethod
+    def register(f):
+        return ProxyRegister.register(f,key="__name__")
+
+    @classmethod
+    def create_arg_parser(cls,parser):
+        subparser = parser.add_subparsers(dest="proxy_name",help="Proxy")
+        for proxy in ProxyRegister.itervalues():
+            p = subparser.add_parser(proxy.__name__,help=proxy._desc_)
+
+            # Add available modules for this proxy
+            p = module.Module.create_arg_parser(p,proxy.__name__)
+
+            proxy.create_arg_subparser(p)
+
+        return parser
+
+    @classmethod
+    def create_arg_subparser(cls,parser):
+        pass
+
+    def __init__(self,args):
+        self.port = args.port
+        self.host = args.bind
+        m = module.ModuleRegister.get(args.module_name)
+        self.modules = [m(args)]
+        self.sock = self.bind()
 
     def connect(self):
         pass
@@ -116,30 +152,3 @@ class Proxy(object):
 
         for t in threads:
             t.stop = True
-
-class Layer4Proxy(Proxy):
-    def bind(self):
-        s = socket.socket(socket.AF_INET, self.socket_protocol)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((self.host,self.port))
-        s.listen(200)
-        return s
-
-    def connect(self,addr):
-        return socket.socket(socket.AF_INET, self.socket_protocol)
-
-class TCPProxy(Layer4Proxy):
-    socket_protocol = socket.SOCK_STREAM
-
-    def connect(self,addr):
-        s = self.connect(addr)
-        try:
-            logger.debug("Connect to (%s,%u)" % (addr[0],addr[1]))
-            s.connect(addr)
-        except socket.error as e:
-            logger.warning("Connect to (%s,%u) : %s" % (addr[0],addr[1],e))
-        return s
-
-
-class UDPProxy(Layer4Proxy):
-    socket_protocol = socket.SOCK_DGRAM
