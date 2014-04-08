@@ -13,9 +13,9 @@ except:
     print "python-argparse is needed"
     sys.exit(1)
 
+
 import proxy
-import module
-from modules import *
+from proxys import *
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Python Proxy")
@@ -27,16 +27,13 @@ def get_parser():
 def main():
     """ Entry Point Program """
     parser = get_parser()
-    parser = module.Module.create_arg_parser(parser)
+    parser = proxy.Proxy.create_arg_parser(parser)
     args = parser.parse_args()
 
     proxy.logger.setLevel(getattr(logging,args.debug.upper(),None))
 
-    mod = module.ModuleRegister.get(args.module_name)
-    m = mod(args)
-
-    pxy = proxy.Proxy(args.port,args.bind,[m])
-    pxy.run()
+    pxy = proxy.ProxyRegister.get(args.proxy_name)
+    pxy(args).run()
 
     return 0
 
