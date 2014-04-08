@@ -4,8 +4,6 @@
 import sys
 from collections import defaultdict
 
-from proxy import Proxy
-
 class ModuleRegister(object):
     registry = defaultdict(dict)
 

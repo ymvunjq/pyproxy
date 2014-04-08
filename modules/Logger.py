@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from proxy import Proxy
 from module import Module
 
 @Module.register
