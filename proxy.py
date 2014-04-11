@@ -23,13 +23,11 @@ logger.addHandler(store)
 
 class ThreadProxy(Thread):
     """ Handle communication between client and server """
-    def __init__(self,sock_client,proxy,ip,port,timeout=3):
+    def __init__(self,sock_client,proxy,timeout=3):
         Thread.__init__(self)
         self.sock_client = sock_client
         self.proxy = proxy
         self.timeout = timeout
-        self.server_ip = ip
-        self.server_port = port
         self.stop = False
 
     def forward(self,sock_server):
@@ -59,21 +57,10 @@ class ThreadProxy(Thread):
                         return
 
     def run(self):
-        try:
-            data = self.sock_client.recv(MAX_DATA_RECV)
-        except socket.error as e:
-            logger.warning("%s" % e)
-            self.sock_client.close()
-            return
-
-        if len(data) != 0:
-            self.proxy.onReceiveClient(data)
-
-            s = self.proxy.connect()
-            self.forward(s)
-            s.close()
-
-        self.conn.close()
+        s = self.proxy.connect()
+        self.forward(s)
+        s.close()
+        self.sock_client.close()
 
 class ProxyRegister(object):
     registry = {}
@@ -123,7 +110,7 @@ class Proxy(object):
         self.modules = [m(args)]
         self.sock = self.bind()
 
-    def connect(self):
+    def connect(self,addr):
         pass
 
     def close(self,sock):
@@ -141,8 +128,10 @@ class Proxy(object):
         threads = []
         try:
             while True:
+                logger.debug("Waiting for new client...")
                 client_sock,client_addr = self.sock.accept()
-                th = ThreadProxy(client_sock,self.onReceiveClient,self.onReceiveServer)
+                logger.debug("New client: %r" % (client_addr,))
+                th = ThreadProxy(client_sock,self)
                 th.start()
                 threads.append(th)
         except KeyboardInterrupt:
