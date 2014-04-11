@@ -23,44 +23,13 @@ logger.addHandler(store)
 
 class ThreadProxy(Thread):
     """ Handle communication between client and server """
-    def __init__(self,sock_client,proxy,timeout=3):
+    def __init__(self,proxy,client_sock):
         Thread.__init__(self)
-        self.sock_client = sock_client
         self.proxy = proxy
-        self.timeout = timeout
-        self.stop = False
-
-    def forward(self,sock_server):
-        """ Proxyfy between client and server """
-        socks = [self.sock_client,sock_server]
-        while not self.stop:
-            (read,write,error) = select.select(socks,[],socks,self.timeout)
-            if error:
-                return
-            if read:
-                for s in read:
-                    try:
-                        data = s.recv(MAX_DATA_RECV)
-                    except socket.error as e:
-                        logger.warning("%s" % e)
-                        return
-
-                    if len(data) > 0:
-                        if s == self.sock_client:  # From client
-                            out = sock_server
-                            self.proxy.onReceiveClient(data)
-                        else: # From server
-                            out = self.sock_client
-                            self.proxy.onReceiveServer(data)
-                        out.send(data)
-                    else:
-                        return
+        self.client_sock = client_sock
 
     def run(self):
-        s = self.proxy.connect()
-        self.forward(s)
-        s.close()
-        self.sock_client.close()
+        self.proxy.manage_connection(self.client_sock)
 
 class ProxyRegister(object):
     registry = {}
@@ -104,25 +73,65 @@ class Proxy(object):
         pass
 
     def __init__(self,args):
+        self.timeout = 3
         self.port = args.port
         self.host = args.bind
         m = module.ModuleRegister.get(args.module_name)
         self.modules = [m(args)]
         self.sock = self.bind()
+        self.stop = False
 
-    def connect(self,addr):
+    def connect(self):
         pass
 
     def close(self,sock):
         sock.close()
 
     def onReceiveClient(self,request):
+        """ Hook to add action on packet reception from client """
         for m in self.modules:
             m.onReceiveClient(request)
 
     def onReceiveServer(self,response):
+        """ Hook to add action on packet reception from server """
         for m in self.modules:
             m.onReceiveServer(response)
+
+    def init_forward(self):
+        return self.connect()
+
+    def manage_connection(self,client_sock):
+        """ Manage one connection """
+        server_sock = self.init_forward()
+        self.forward(client_sock,server_sock)
+        server_sock.close()
+        client_sock.close()
+
+    def forward(self,client_sock,server_sock):
+        """ Proxyfy between client and server """
+        socks = [client_sock,server_sock]
+        while not self.stop:
+            (read,write,error) = select.select(socks,[],socks,self.timeout)
+            if error:
+                return
+            if read:
+                for s in read:
+                    try:
+                        data = s.recv(MAX_DATA_RECV)
+                    except socket.error as e:
+                        logger.warning("%s" % e)
+                        return
+
+                    if len(data) > 0:
+                        if s == client_sock:  # From client
+                            out = server_sock
+                            self.onReceiveClient(data)
+                        else: # From server
+                            out = client_sock
+                            self.onReceiveServer(data)
+                        out.send(data)
+                    else:
+                        return
 
     def run(self):
         threads = []
@@ -131,7 +140,7 @@ class Proxy(object):
                 logger.debug("Waiting for new client...")
                 client_sock,client_addr = self.sock.accept()
                 logger.debug("New client: %r" % (client_addr,))
-                th = ThreadProxy(client_sock,self)
+                th = ThreadProxy(self,client_sock)
                 th.start()
                 threads.append(th)
         except KeyboardInterrupt:
@@ -139,5 +148,4 @@ class Proxy(object):
 
         self.sock.close()
 
-        for t in threads:
-            t.stop = True
+        self.stop = True
