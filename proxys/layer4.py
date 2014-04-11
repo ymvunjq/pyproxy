@@ -3,7 +3,7 @@
 
 import socket
 
-from proxy import Proxy
+from proxy import Proxy,logger
 
 class Layer4Proxy(Proxy):
     @classmethod
@@ -26,20 +26,20 @@ class Layer4Proxy(Proxy):
         s.listen(200)
         return s
 
-    def connect(self,addr):
+    def connect(self):
         return socket.socket(socket.AF_INET, self.socket_protocol)
 
 @Proxy.register
 class TCPProxy(Layer4Proxy):
     socket_protocol = socket.SOCK_STREAM
 
-    def connect(self,addr):
-        s = self.connect(addr)
+    def connect(self):
+        s = Layer4Proxy.connect(self)
         try:
-            logger.debug("Connect to (%s,%u)" % (addr[0],addr[1]))
-            s.connect(addr)
+            logger.debug("Connect to (%s,%u)" % (self.server_ip,self.server_port))
+            s.connect((self.server_ip,self.server_port))
         except socket.error as e:
-            logger.warning("Connect to (%s,%u) : %s" % (addr[0],addr[1],e))
+            logger.warning("Connect to (%s,%u) : %s" % (self.server_ip,self.server_port,e))
         return s
 
 
