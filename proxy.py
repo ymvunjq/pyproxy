@@ -81,9 +81,6 @@ class Proxy(object):
         self.sock = self.bind()
         self.stop = False
 
-    def connect(self):
-        pass
-
     def close(self,sock):
         sock.close()
 
@@ -98,14 +95,10 @@ class Proxy(object):
             m.onReceiveServer(response)
 
     def init_forward(self):
-        return self.connect()
+        pass
 
     def manage_connection(self,client_sock):
-        """ Manage one connection """
-        server_sock = self.init_forward()
-        self.forward(client_sock,server_sock)
-        server_sock.close()
-        client_sock.close()
+        pass
 
     def forward(self,client_sock,server_sock):
         """ Proxyfy between client and server """
@@ -138,8 +131,7 @@ class Proxy(object):
         try:
             while True:
                 logger.debug("Waiting for new client...")
-                client_sock,client_addr = self.sock.accept()
-                logger.debug("New client: %r" % (client_addr,))
+                client_sock = self.accept()
                 th = ThreadProxy(self,client_sock)
                 th.start()
                 threads.append(th)

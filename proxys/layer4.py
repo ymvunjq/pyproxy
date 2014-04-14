@@ -2,8 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import socket
+import select
 
 from proxy import Proxy,logger
+
+MAX_DATA_RECV=4096
 
 class Layer4Proxy(Proxy):
     @classmethod
@@ -23,18 +26,10 @@ class Layer4Proxy(Proxy):
         s = socket.socket(socket.AF_INET, self.socket_protocol)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((self.host,self.port))
-        s.listen(200)
         return s
 
-    def connect(self):
-        return socket.socket(socket.AF_INET, self.socket_protocol)
-
-@Proxy.register
-class TCPProxy(Layer4Proxy):
-    socket_protocol = socket.SOCK_STREAM
-
-    def connect(self):
-        s = Layer4Proxy.connect(self)
+    def init_forward(self):
+        s = socket.socket(socket.AF_INET, self.socket_protocol)
         try:
             logger.debug("Connect to (%s,%u)" % (self.server_ip,self.server_port))
             s.connect((self.server_ip,self.server_port))
@@ -42,7 +37,79 @@ class TCPProxy(Layer4Proxy):
             logger.warning("Connect to (%s,%u) : %s" % (self.server_ip,self.server_port,e))
         return s
 
+@Proxy.register
+class TCPProxy(Layer4Proxy):
+    socket_protocol = socket.SOCK_STREAM
+
+    def bind(self):
+        s = Layer4Proxy.bind(self)
+        s.listen(200)
+        return s
+
+    def manage_connection(self,client_sock):
+        """ Manage one connection """
+        server_sock = self.init_forward()
+        self.forward(client_sock,server_sock)
+        server_sock.close()
+        client_sock.close()
+
+    def accept(self):
+        client_sock,client_addr = self.sock.accept()
+        logger.debug("New client: %r" % (client_addr,))
+        return client_sock
+
 
 @Proxy.register
 class UDPProxy(Layer4Proxy):
     socket_protocol = socket.SOCK_DGRAM
+
+    def __init__(self,args):
+        Layer4Proxy.__init__(self,args)
+        self.server_socks = {}
+
+    def forward(self):
+        """ Proxyfy between client and server """
+        socks = [self.sock]
+        while True:
+            (read,write,error) = select.select(socks,[],socks,self.timeout)
+            if error:
+                return
+            if read:
+                for s in read:
+                    try:
+                        data,addr = s.recvfrom(MAX_DATA_RECV)
+                    except socket.error as e:
+                        logger.warning("%s" % e)
+                        return
+
+                    if len(data) > 0:
+                        if s == self.sock:  # From client
+                            if not addr in self.server_socks:
+                                server_sock = self.init_forward()
+                                self.server_socks[addr] = server_sock
+                                socks.append(server_sock)
+                            else:
+                                server_sock = self.server_socks[addr]
+                            self.onReceiveClient(data)
+                            out = server_sock
+                            dst = (self.server_ip,self.server_port)
+                        else:
+                            for addr,server_sock in self.server_socks.iteritems():
+                                if server_sock == s:
+                                    dst = addr
+                                    break
+                            else:
+                                assert False, "Socket server not found"
+                            self.onReceiveServer(data)
+                            out = self.sock
+                        out.sendto(data,dst)
+                    else:
+                        print "Should close UDP socket"
+
+    def run(self):
+        try:
+            self.forward()
+        except KeyboardInterrupt:
+            pass
+
+        self.sock.close()
