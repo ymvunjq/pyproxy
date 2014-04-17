@@ -4,21 +4,14 @@
 import sys
 import socket,select
 import urlparse
-import traceback
-from threading import Thread
 import logging
 import re
 
+from proxy import Proxy,logger
+from proxys.layer4 import TCPProxy
 from utils import InsensitiveDict
 
 MAX_DATA_RECV=4096
-
-logger = logging.getLogger("PYPROXY")
-logger.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-store = logging.FileHandler("pyproxy.log")
-store.setFormatter(formatter)
-logger.addHandler(store)
 
 class HTTPComm(object):
     """ Request/Response HTTP """
@@ -143,19 +136,8 @@ class Response(HTTPComm):
         self.code_response = line[end_code+1:]
 
 
-class ThreadProxy(Thread):
-    """ Handle HTTP Proxy communication between client and server """
-    def __init__(self,conn,client_addr,from_client,from_server,fcom,timeout=3):
-        Thread.__init__(self)
-        self.conn = conn
-        self.client_addr = client_addr
-        self.from_client = from_client
-        self.from_server = from_server
-        self.fcom = fcom
-        self.timeout = timeout
-        self.stop = False
-        self.requests = [] # list of requests waiting for responses
-
+@Proxy.register
+class HTTPProxy(TCPProxy):
     @staticmethod
     def urlparse(url):
         """ Return tuple (ip,port) """
@@ -167,10 +149,50 @@ class ThreadProxy(Thread):
         else:
             return (netloc,443 if req.scheme == "https" else 80)
 
-    def forward_http(self,client):
+    def __init__(self,args):
+        TCPProxy.__init__(self,args)
+        self.requests = [] # list of requests waiting for responses
+
+    def init_forward(self,addr,client_sock):
+        try:
+            data = client_sock.recv(MAX_DATA_RECV)
+        except socket.error as e:
+            logger.warning("%s" % e)
+            client_sock.close()
+            return
+
+        if len(data) != 0:
+            request = Request(data)
+            self.requests.append(request)
+            self.onReceiveClient(data)
+
+            # URL Parsing
+            addr = HTTPProxy.urlparse(request.url)
+
+            s = TCPProxy.init_forward(self,addr,client_sock)
+
+            if request.method == "CONNECT":
+                client_sock.send("%s 200 Connection established\n\n" % request.version)
+                f = TCPProxy.forward
+            else:
+                data = request.proxyfy()
+                print data
+                s.send(data)
+                f = HTTPProxy.forward
+
+            return s,f
+
+    def manage_connection(self,client_sock):
+        """ Manage one connection """
+        server_sock,func = self.init_forward((self.server_ip,self.server_port),client_sock)
+        func(self,client_sock,server_sock)
+        server_sock.close()
+        client_sock.close()
+
+    def forward(self,client_sock,server_sock):
         """ Proxyfy between client and server """
         response = None
-        socks = [self.conn,client]
+        socks = [client_sock,server_sock]
         while not self.stop:
             (read,write,error) = select.select(socks,[],socks,self.timeout)
             if error:
@@ -184,28 +206,31 @@ class ThreadProxy(Thread):
                         return
 
                     if len(data) > 0:
-                        if s == self.conn:  # From web client
-                            out = client
+                        if s == client_sock:  # From web client
+                            out = server_sock
+                            self.onReceiveClient(data)
 
                             if len(self.requests) == 0 or self.requests[-1].isComplete():
                                 req = Request(data)
-                                self.from_client(req)
+                                self.onHTTPReceiveClient(req)
                                 data = req.proxyfy()
                                 self.requests.append(req)
                             else:
                                 #print "> DATA: %r" % data
                                 self.requests[-1].append(data)
                         else: # From web server
-                            out = self.conn
+                            out = client_sock
+                            self.onReceiveServer(data)
+
                             if not response:
                                 response = Response(data)
                                 if response.isComplete():
                                     #print "< DATA: %r" % data
-                                    self.from_server(response)
+                                    self.onHTTPReceiveServer(response)
                                     assert len(self.requests) > 0
                                     request = self.requests.pop(0)
                                     assert request.isComplete()
-                                    self.fcom(request,response)
+                                    self.onHTTPCommunication(request,response)
                                     response = None
                             else:
                                 response.append(data)
@@ -213,98 +238,14 @@ class ThreadProxy(Thread):
                     else:
                         return
 
-    def forward_https(self,client):
-        """ Proxyfy between client and server """
-        socks = [self.conn,client]
-        while not self.stop:
-            (read,write,error) = select.select(socks,[],socks,self.timeout)
-            if error:
-                return
-            if read:
-                for s in read:
-                    try:
-                        data = s.recv(MAX_DATA_RECV)
-                    except socket.error as e:
-                        logger.warning("%s" % e)
-                        return
-
-                    if len(data) > 0:
-                        if s == self.conn:  # From web client
-                            out = client
-                        else: # From web server
-                            out = self.conn
-                        out.send(data)
-                    else:
-                        return
-
-    def run(self):
-        try:
-            data = self.conn.recv(MAX_DATA_RECV)
-        except socket.error as e:
-            logger.warning("%s" % e)
-            self.conn.close()
-            return
-
-        if len(data) != 0:
-            request = Request(data)
-            self.requests.append(request)
-            self.from_client(request)
-
-            # URL Parsing
-            ip,port = ThreadProxy.urlparse(request.url)
-
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            try:
-                logger.debug("Connect to (%s,%u)" % (ip,port))
-                s.connect((ip,port))
-            except socket.error as e:
-                logger.warning("Connect to (%s,%u) : %s" % (ip,port,e))
-            else:
-                if request.method == "CONNECT":
-                    self.conn.send("%s 200 Connection established\n\n" % request.version)
-                    self.forward_https(s)
-                else:
-                    data = request.proxyfy()
-                    s.send(data)
-                    self.forward_http(s)
-            s.close()
-
-        self.conn.close()
-
-class Proxy(object):
-    def __init__(self,port=8080,host="127.0.0.1",modules=[]):
-        self.port = port
-        self.host = host
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind((self.host,self.port))
-        self.sock.listen(200)
-        self.modules = modules
-
-    def onReceiveClient(self,request):
+    def onHTTPReceiveClient(self,request):
         for m in self.modules:
-            m.onReceiveClient(request)
+            m.onHTTPReceiveClient(request)
 
-    def onReceiveServer(self,response):
+    def onHTTPReceiveServer(self,response):
         for m in self.modules:
-            m.onReceiveServer(response)
+            m.onHTTPReceiveServer(response)
 
-    def onCommunication(self,request,response):
+    def onHTTPCommunication(self,request,response):
         for m in self.modules:
-            m.onCommunication(request,response)
-
-    def run(self):
-        threads = []
-        try:
-            while True:
-                client_sock,client_addr = self.sock.accept()
-                th = ThreadProxy(client_sock,client_addr,self.onReceiveClient,self.onReceiveServer,self.onCommunication)
-                th.start()
-                threads.append(th)
-        except KeyboardInterrupt:
-            pass
-
-        self.sock.close()
-
-        for t in threads:
-            t.stop = True
+            m.onHTTPCommunication(request,response)
