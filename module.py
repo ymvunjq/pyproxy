@@ -54,6 +54,3 @@ class Module(object):
 
     def onReceiveServer(self,response):
         pass
-
-    def onCommunication(self,request,response):
-        pass
