@@ -3,9 +3,9 @@
 
 from module import Module
 
-@Module.register
+@Module.register("HTTPProxy")
 class Logger(Module):
-    _desc_ = "Logging Proxy"
+    _desc_ = "HTTP Logging Proxy"
 
     @classmethod
     def create_arg_subparser(cls,parser):
@@ -29,7 +29,7 @@ class Logger(Module):
     def _print_data(self,http,direction=">"):
         print "%s %r" % (direction,http.data)
 
-    def onReceiveClient(self,request):
+    def onHTTPReceiveClient(self,request):
         if self.log_request:
             print "> %s %s" % (request.method,request.url)
             if self.headers:
@@ -38,7 +38,7 @@ class Logger(Module):
                 self._print_data(request)
             print ""
 
-    def onReceiveServer(self,response):
+    def onHTTPReceiveServer(self,response):
         if self.log_response:
             print "< %r %s" % (response.code,response.code_response)
             if self.headers:
@@ -47,7 +47,7 @@ class Logger(Module):
                 self._print_data(response,"<")
             print ""
 
-    def onCommunication(self,request,response):
+    def onHTTPCommunication(self,request,response):
         if self.log:
             print "%s %s => %r %s" % (request.method,request.url,response.code,response.code_response)
             print ""
