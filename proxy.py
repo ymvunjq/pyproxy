@@ -94,9 +94,6 @@ class Proxy(object):
         for m in self.modules:
             m.onReceiveServer(response)
 
-    def init_forward(self,data):
-        pass
-
     def manage_connection(self,client_sock):
         pass
 

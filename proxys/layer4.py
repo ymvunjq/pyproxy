@@ -28,13 +28,13 @@ class Layer4Proxy(Proxy):
         s.bind((self.host,self.port))
         return s
 
-    def init_forward(self,data):
+    def init_forward(self,addr,client_sock):
         s = socket.socket(socket.AF_INET, self.socket_protocol)
         try:
-            logger.debug("Connect to (%s,%u)" % (self.server_ip,self.server_port))
-            s.connect((self.server_ip,self.server_port))
+            logger.debug("Connect to %r" % (addr,))
+            s.connect(addr)
         except socket.error as e:
-            logger.warning("Connect to (%s,%u) : %s" % (self.server_ip,self.server_port,e))
+            logger.warning("Connect to %r : %s" % (addr,e))
         return s
 
 @Proxy.register
@@ -48,7 +48,7 @@ class TCPProxy(Layer4Proxy):
 
     def manage_connection(self,client_sock):
         """ Manage one connection """
-        server_sock = self.init_forward(None)
+        server_sock = self.init_forward((self.server_ip,self.server_port),client_sock)
         self.forward(client_sock,server_sock)
         server_sock.close()
         client_sock.close()
@@ -85,7 +85,7 @@ class UDPProxy(Layer4Proxy):
                     if len(data) > 0:
                         if s == self.sock:  # From client
                             if not addr in self.server_socks:
-                                server_sock = self.init_forward(None)
+                                server_sock = self.init_forward(self.sock)
                                 self.server_socks[addr] = server_sock
                                 socks.append(server_sock)
                             else:
