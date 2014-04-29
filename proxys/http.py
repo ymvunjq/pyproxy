@@ -6,6 +6,7 @@ import socket,select
 import urlparse
 import logging
 import re
+import traceback
 
 from proxy import Proxy,logger
 from proxys.layer4 import TCPProxy
@@ -192,7 +193,6 @@ class HTTPProxy(TCPProxy):
         client_sock.close()
 
     def onReceiveClient(self,data):
-        data = TCPProxy.onReceiveClient(self,data)
         if self.type == "http":
             if len(self.requests) == 0 or self.requests[-1].isComplete():
                 req = Request(data)
@@ -201,10 +201,10 @@ class HTTPProxy(TCPProxy):
                 self.requests.append(req)
             else:
                 self.requests[-1].append(data)
+        data = TCPProxy.onReceiveClient(self,data)
         return data
 
     def onReceiveServer(self,data):
-        data = TCPProxy.onReceiveServer(self,data)
         if self.type == "http":
             if self.response is None:
                 self.response = Response(data)
@@ -218,6 +218,7 @@ class HTTPProxy(TCPProxy):
                 assert request.isComplete()
                 self.onHTTPCommunication(request,self.response)
                 self.response = None
+        data = TCPProxy.onReceiveServer(self,data)
         return data
 
     def onHTTPReceiveClient(self,request):
