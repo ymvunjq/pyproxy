@@ -2,11 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import socket,select
-import traceback
-from threading import Thread
 import logging
-import re
 
 import module
 from modules import *
@@ -20,16 +16,6 @@ store = logging.FileHandler("pyproxy.log")
 store.setFormatter(formatter)
 logger.addHandler(store)
 
-
-class ThreadProxy(Thread):
-    """ Handle communication between client and server """
-    def __init__(self,proxy,client_sock):
-        Thread.__init__(self)
-        self.proxy = proxy
-        self.client_sock = client_sock
-
-    def run(self):
-        self.proxy.manage_connection(self.client_sock)
 
 class ProxyRegister(object):
     registry = {}
@@ -113,22 +99,7 @@ class Proxy(object):
                 else:
                     sout = sin.get_associate()
                 if len(data) == 0:
+                    self.stop = True
                     return
                 data = hook(data)
                 sout.send(data)
-
-    def run(self):
-        threads = []
-        try:
-            while True:
-                logger.debug("Waiting for new client...")
-                client_sock = self.accept()
-                th = ThreadProxy(self,client_sock)
-                th.start()
-                threads.append(th)
-        except KeyboardInterrupt:
-            pass
-
-        self.sock.close()
-
-        self.stop = True
