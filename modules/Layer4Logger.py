@@ -20,7 +20,9 @@ class Layer4Logger(Module):
     def onReceiveClient(self,request):
         if self.log_request:
             print "> %s" % (request,)
+        return request
 
     def onReceiveServer(self,response):
         if self.log_response:
             print "< %s" % (response,)
+        return response
