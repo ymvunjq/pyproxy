@@ -3,6 +3,8 @@
 
 import select
 import socket
+from copy import copy
+from threading import Thread
 from network import TCPSocket,UDPSocket
 
 from proxy import Proxy,logger
@@ -37,7 +39,19 @@ class Layer4Proxy(Proxy):
             s.connect(addr)
         except socket.error as e:
             logger.warning("Connect to %r : %s" % (addr,e))
+        s.set_associate(client_sock)
         return s
+
+class ForwarderTCP(Thread):
+    """ Handle communication between client and server """
+    def __init__(self,proxy,client_sock):
+        Thread.__init__(self)
+        # copy because we want to change instance object in a thread without modifying other threads
+        self.proxy = copy(proxy)
+        self.client_sock = client_sock
+
+    def run(self):
+        self.proxy.manage_connection(self.client_sock)
 
 @Proxy.register
 class TCPProxy(Layer4Proxy):
@@ -51,7 +65,6 @@ class TCPProxy(Layer4Proxy):
     def manage_connection(self,client_sock):
         """ Manage one connection """
         server_sock = self.init_forward((self.server_ip,self.server_port),client_sock)
-        server_sock.set_associate(client_sock)
         self.forward((client_sock,server_sock))
         server_sock.close()
         client_sock.close()
@@ -64,15 +77,35 @@ class TCPProxy(Layer4Proxy):
 
     def read_on_sockets(self,socks):
         real_socks = map(lambda s:s.sock,socks)
-        while True:
+        while not self.stop:
             (read,write,error) = select.select(real_socks,[],real_socks,self.timeout)
             if error:
                 continue
-            if read:
+            elif read:
                 for sock in read:
-                    data = sock.recv(MAX_DATA_RECV)
+                    try:
+                        data = sock.recv(MAX_DATA_RECV)
+                    except socket.error:
+                        yield (r,"")
                     r = filter(lambda s:s.sock == sock,socks)[0]
                     yield (r,data)
+
+    def run(self):
+        threads = []
+        try:
+            while True:
+                logger.debug("Waiting for new client...")
+                client_sock = self.accept()
+                th = ForwarderTCP(self,client_sock)
+                th.start()
+                threads.append(th)
+        except KeyboardInterrupt:
+            pass
+
+        self.sock.close()
+
+        for th in threads:
+            th.proxy.stop = True
 
 
 @Proxy.register

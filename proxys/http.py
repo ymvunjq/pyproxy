@@ -152,6 +152,8 @@ class HTTPProxy(TCPProxy):
     def __init__(self,args):
         TCPProxy.__init__(self,args)
         self.requests = [] # list of requests waiting for responses
+        self.response = None
+        self.type = None
 
     def init_forward(self,addr,client_sock):
         try:
@@ -172,79 +174,61 @@ class HTTPProxy(TCPProxy):
             s = TCPProxy.init_forward(self,addr,client_sock)
 
             if request.method == "CONNECT":
+                self.type == "https"
                 client_sock.send("%s 200 Connection established\n\n" % request.version)
-                f = TCPProxy.forward
             else:
+                self.type = "http"
                 data = request.proxyfy()
-                print data
                 s.send(data)
-                f = HTTPProxy.forward
 
-            return s,f
+            return s
 
     def manage_connection(self,client_sock):
         """ Manage one connection """
-        server_sock,func = self.init_forward((self.server_ip,self.server_port),client_sock)
-        func(self,client_sock,server_sock)
-        server_sock.close()
+        server_sock = self.init_forward((self.server_ip,self.server_port),client_sock)
+        if not server_sock is None:
+            self.forward((client_sock,server_sock))
+            server_sock.close()
         client_sock.close()
 
-    def forward(self,client_sock,server_sock):
-        """ Proxyfy between client and server """
-        response = None
-        socks = [client_sock,server_sock]
-        while not self.stop:
-            (read,write,error) = select.select(socks,[],socks,self.timeout)
-            if error:
-                return
-            if read:
-                for s in read:
-                    try:
-                        data = s.recv(MAX_DATA_RECV)
-                    except socket.error as e:
-                        logger.warning("%s" % e)
-                        return
+    def onReceiveClient(self,data):
+        data = TCPProxy.onReceiveClient(self,data)
+        if self.type == "http":
+            if len(self.requests) == 0 or self.requests[-1].isComplete():
+                req = Request(data)
+                req = self.onHTTPReceiveClient(req)
+                data = req.proxyfy()
+                self.requests.append(req)
+            else:
+                self.requests[-1].append(data)
+        return data
 
-                    if len(data) > 0:
-                        if s == client_sock:  # From web client
-                            out = server_sock
-                            self.onReceiveClient(data)
-
-                            if len(self.requests) == 0 or self.requests[-1].isComplete():
-                                req = Request(data)
-                                self.onHTTPReceiveClient(req)
-                                data = req.proxyfy()
-                                self.requests.append(req)
-                            else:
-                                #print "> DATA: %r" % data
-                                self.requests[-1].append(data)
-                        else: # From web server
-                            out = client_sock
-                            self.onReceiveServer(data)
-
-                            if not response:
-                                response = Response(data)
-                                if response.isComplete():
-                                    #print "< DATA: %r" % data
-                                    self.onHTTPReceiveServer(response)
-                                    assert len(self.requests) > 0
-                                    request = self.requests.pop(0)
-                                    assert request.isComplete()
-                                    self.onHTTPCommunication(request,response)
-                                    response = None
-                            else:
-                                response.append(data)
-                        out.send(data)
-                    else:
-                        return
+    def onReceiveServer(self,data):
+        data = TCPProxy.onReceiveServer(self,data)
+        if self.type == "http":
+            if self.response is None:
+                self.response = Response(data)
+            else:
+                self.response.append(data)
+            if self.response.isComplete():
+                #print "< DATA: %r" % data
+                self.response = self.onHTTPReceiveServer(self.response)
+                assert len(self.requests) > 0
+                request = self.requests.pop(0)
+                assert request.isComplete()
+                self.onHTTPCommunication(request,self.response)
+                self.response = None
+        return data
 
     def onHTTPReceiveClient(self,request):
         for m in self.modules:
-            m.onHTTPReceiveClient(request)
+            request = m.onHTTPReceiveClient(request)
+        return request
 
     def onHTTPReceiveServer(self,response):
         for m in self.modules:
-            m.onHTTPReceiveServer(response)
+            response = m.onHTTPReceiveServer(response)
+        return response
 
     def onHTTPCommunication(self,request,response):
         for m in self.modules:
