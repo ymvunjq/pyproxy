@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from module import Module
+from module import Module,PassThrough
 
 @Module.register("HTTPProxy")
-class Logger(Module):
+class Logger(PassThrough):
     _desc_ = "HTTP Logging Proxy"
 
     @classmethod
@@ -37,6 +37,7 @@ class Logger(Module):
             if self.data:
                 self._print_data(request)
             print ""
+        return request
 
     def onHTTPReceiveServer(self,response):
         if self.log_response:
@@ -46,6 +47,7 @@ class Logger(Module):
             if self.data:
                 self._print_data(response,"<")
             print ""
+        return response
 
     def onHTTPCommunication(self,request,response):
         if self.log:
