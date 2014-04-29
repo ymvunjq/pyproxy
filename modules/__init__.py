@@ -1,1 +1,1 @@
-__all__ = ["Layer4Logger","Logger"]
+__all__ = ["Logger","HTTPLogger"]
