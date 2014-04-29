@@ -61,8 +61,9 @@ class PassThrough(Module):
         if attr[:2] == "on":
             return self.passthrough
 
-    def passthrough(self,data):
-        return data
+    def passthrough(self,*args):
+        if len(args) == 1:
+            return args[0]
 
     def onReceiveClient(self,request):
         return request
