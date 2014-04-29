@@ -83,11 +83,11 @@ class TCPProxy(Layer4Proxy):
                 continue
             elif read:
                 for sock in read:
+                    r = filter(lambda s:s.sock == sock,socks)[0]
                     try:
                         data = sock.recv(MAX_DATA_RECV)
                     except socket.error:
                         yield (r,"")
-                    r = filter(lambda s:s.sock == sock,socks)[0]
                     yield (r,data)
 
     def run(self):
