@@ -54,3 +54,18 @@ class Module(object):
 
     def onReceiveServer(self,response):
         pass
+
+
+class PassThrough(Module):
+    def __getattr__(self,attr):
+        if attr[:2] == "on":
+            return self.passthrough
+
+    def passthrough(self,data):
+        return data
+
+    def onReceiveClient(self,request):
+        return request
+
+    def onReceiveServer(self,response):
+        return response
