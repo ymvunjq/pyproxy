@@ -84,44 +84,38 @@ class Proxy(object):
     def close(self,sock):
         sock.close()
 
-    def onReceiveClient(self,request):
+    def onReceiveClient(self,data):
         """ Hook to add action on packet reception from client """
         for m in self.modules:
-            m.onReceiveClient(request)
+            data = m.onReceiveClient(data)
+        return data
 
-    def onReceiveServer(self,response):
+    def onReceiveServer(self,data):
         """ Hook to add action on packet reception from server """
         for m in self.modules:
-            m.onReceiveServer(response)
+            data = m.onReceiveServer(data)
+        return data
 
     def manage_connection(self,client_sock):
         pass
 
-    def forward(self,client_sock,server_sock):
-        """ Proxyfy between client and server """
-        socks = [client_sock,server_sock]
+    def forward(self,socks):
         while not self.stop:
-            (read,write,error) = select.select(socks,[],socks,self.timeout)
-            if error:
-                return
-            if read:
-                for s in read:
-                    try:
-                        data = s.recv(MAX_DATA_RECV)
-                    except socket.error as e:
-                        logger.warning("%s" % e)
-                        return
-
-                    if len(data) > 0:
-                        if s == client_sock:  # From client
-                            out = server_sock
-                            self.onReceiveClient(data)
-                        else: # From server
-                            out = client_sock
-                            self.onReceiveServer(data)
-                        out.send(data)
-                    else:
-                        return
+            for sin,data in self.read_on_sockets(socks):
+                if sin.is_client():
+                    hook = self.onReceiveClient
+                else:
+                    hook = self.onReceiveServer
+                if not sin.has_associate():
+                    sout = self.init_forward(self.dst)
+                    sout.set_associate(sin)
+                    socks.append(sout)
+                else:
+                    sout = sin.get_associate()
+                if len(data) == 0:
+                    return
+                data = hook(data)
+                sout.send(data)
 
     def run(self):
         threads = []
