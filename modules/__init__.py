@@ -1,1 +1,1 @@
-__all__ = ["Logger","HTTPLogger"]
+__all__ = ["Logger","HTTPLogger","Corrupt"]
